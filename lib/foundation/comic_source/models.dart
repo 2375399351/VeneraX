@@ -248,8 +248,11 @@ class ComicDetails with HistoryMixin {
     };
   }
 
+  /// Must agree with [comicType]: history is written under this type and looked
+  /// up under [comicType]. `'local'.hashCode` is not the canonical local type,
+  /// so hashing the key here left local comics unable to resume (issue #277).
   @override
-  HistoryType get historyType => HistoryType(sourceKey.hashCode);
+  HistoryType get historyType => comicType;
 
   @override
   String get id => comicId;

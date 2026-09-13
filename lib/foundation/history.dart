@@ -13,6 +13,7 @@ import 'package:venera/foundation/favorites.dart';
 import 'package:venera/foundation/image_provider/image_favorites_provider.dart';
 import 'package:venera/foundation/log.dart';
 import 'package:venera/foundation/reading_statistics.dart';
+import 'package:venera/foundation/source_platform.dart';
 import 'package:venera/foundation/sqlite_connection.dart';
 import 'package:venera/utils/channel.dart';
 import 'package:venera/utils/ext.dart';
@@ -298,7 +299,78 @@ class HistoryManager with ChangeNotifier {
     if (!columns.any((element) => element["name"] == "hidden")) {
       _db.execute("alter table history add column hidden int;");
     }
+    _migrateLegacyLocalType();
     _readingStatistics = ReadingStatisticsStore(_db)..ensureSchema();
+  }
+
+  /// Local comics are keyed by [ComicType.local] (0), but the details page used
+  /// to derive the type from `sourceKey.hashCode`, storing their progress under
+  /// a type no lookup ever asks for — the reader always reopened at page 1 and
+  /// the history list showed the record as an unknown source. Move those rows
+  /// onto type 0, merging into an existing record when both are present.
+  void _migrateLegacyLocalType() {
+    final legacyType = SourcePlatformResolver.localCanonicalKey.hashCode;
+    if (legacyType == ComicType.local.value) return;
+    final legacyRows = _db.select(
+      "select * from history where type == ?;",
+      [legacyType],
+    );
+    if (legacyRows.isEmpty) return;
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      for (final legacy in legacyRows) {
+        final id = legacy["id"]?.toString() ?? '';
+        if (id.isEmpty) continue;
+        final current = _db.select(
+          "select * from history where id == ? and type == ?;",
+          [id, ComicType.local.value],
+        );
+        final existing = current.isEmpty ? null : current.first;
+        // Newer position wins; read marks are unioned so neither side loses a
+        // chapter mark. Columns are read through the tolerant helpers because
+        // an imported backup may carry NULLs that History.fromRow rejects.
+        final winner =
+            existing != null &&
+                _historyInt(existing["time"]) > _historyInt(legacy["time"])
+            ? existing
+            : legacy;
+        final reads = <String>{
+          ..._readEpisodeSet(legacy["readEpisode"]),
+          if (existing != null) ..._readEpisodeSet(existing["readEpisode"]),
+        };
+        // A row visible on either side stays in the list.
+        final visible =
+            _historyInt(legacy["hidden"]) == 0 ||
+            (existing != null && _historyInt(existing["hidden"]) == 0);
+        _db.execute(_insertHistorySql, [
+          id,
+          winner["title"]?.toString() ?? '',
+          winner["subtitle"]?.toString() ?? '',
+          winner["cover"]?.toString() ?? '',
+          _historyInt(winner["time"]),
+          ComicType.local.value,
+          _historyInt(winner["ep"]),
+          _historyInt(winner["page"]),
+          reads.join(','),
+          _historyNullableInt(winner["max_page"]),
+          _historyNullableInt(winner["chapter_group"]),
+        ]);
+        if (!visible) {
+          _db.execute(
+            "update history set hidden = 1 where id == ? and type == ?;",
+            [id, ComicType.local.value],
+          );
+        }
+        _db.execute("delete from history where id == ? and type == ?;", [
+          id,
+          legacyType,
+        ]);
+      }
+      _db.execute('COMMIT;');
+    } catch (e, s) {
+      _db.execute('ROLLBACK;');
+      Log.error("History", "Failed to migrate local history type: $e", s);
+    }
   }
 
   void recordReadingDuration({

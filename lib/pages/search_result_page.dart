@@ -4,6 +4,7 @@ import 'package:venera/foundation/app.dart';
 import 'package:venera/foundation/appdata.dart';
 import 'package:venera/foundation/comic_source/comic_source.dart';
 import 'package:venera/foundation/global_state.dart';
+import 'package:venera/pages/aggregated_search_page.dart';
 import 'package:venera/pages/search_page.dart';
 import 'package:venera/utils/ext.dart';
 import 'package:venera/utils/tags_translation.dart';
@@ -49,6 +50,13 @@ class _SearchResultPageState extends State<SearchResultPage> {
         suggestionsController.remove();
       }
       text = checkAutoLanguage(text);
+      // Re-searching the current target is pointless when it can't search, so
+      // hand the keyword to the aggregated search rather than leaving the user
+      // typing into a dead search bar.
+      if (_searchData == null) {
+        context.to(() => AggregatedSearchPage(keyword: text!));
+        return;
+      }
       setState(() {
         this.text = text!;
       });
@@ -58,7 +66,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
   }
 
   void onChanged(String s) {
-    if (!ComicSource.find(sourceKey)!.enableTagsSuggestions) {
+    if (ComicSource.find(sourceKey)?.enableTagsSuggestions != true) {
       return;
     }
     suggestionsController.findSuggestions();
@@ -124,11 +132,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
   }
 
   void validateOptions() {
-    var source = ComicSource.find(sourceKey);
-    if (source == null) {
-      return;
-    }
-    var searchOptions = source.searchPageData!.searchOptions;
+    var searchOptions = _searchData?.searchOptions;
     if (searchOptions == null) {
       return;
     }
@@ -137,9 +141,27 @@ class _SearchResultPageState extends State<SearchResultPage> {
     }
   }
 
+  /// Null when the target can't search: collections and online libraries are
+  /// native sources built without a search implementation, and a source may also
+  /// have been uninstalled since the tag or shared link was created.
+  SearchPageData? get _searchData => ComicSource.find(sourceKey)?.searchPageData;
+
   @override
   Widget build(BuildContext context) {
-    var source = ComicSource.find(sourceKey);
+    var searchData = _searchData;
+    if (searchData == null) {
+      return Column(
+        children: [
+          AppSearchBar(controller: controller),
+          Expanded(
+            child: NetworkError(
+              withAppbar: false,
+              message: "This source does not support searching".tl,
+            ),
+          ),
+        ],
+      );
+    }
     return ComicList(
       key: Key(text + options.toString() + sourceKey),
       enableSelection: true,
@@ -151,15 +173,15 @@ class _SearchResultPageState extends State<SearchResultPage> {
         onChanged: onChanged,
         action: buildAction(),
       ),
-      loadPage: source!.searchPageData!.loadPage == null
+      loadPage: searchData.loadPage == null
           ? null
           : (i) {
-              return source.searchPageData!.loadPage!(text, i, options);
+              return searchData.loadPage!(text, i, options);
             },
-      loadNext: source.searchPageData!.loadNext == null
+      loadNext: searchData.loadNext == null
           ? null
           : (i) {
-              return source.searchPageData!.loadNext!(text, i, options);
+              return searchData.loadNext!(text, i, options);
             },
     );
   }
@@ -446,8 +468,11 @@ class _SearchSettingsDialogState extends State<_SearchSettingsDialog> {
   Widget build(BuildContext context) {
     var sources = ComicSource.all();
     var enabled = appdata.settings['searchSources'] as List;
+    // Drop the ones that can't search: the enabled list is a plain key list and
+    // may still name a source whose search implementation is gone, or one that
+    // never had one.
     sources.removeWhere((e) {
-      return !enabled.contains(e.key);
+      return !enabled.contains(e.key) || e.searchPageData == null;
     });
     return ContentDialog(
       title: "Settings".tl,
@@ -471,7 +496,7 @@ class _SearchSettingsDialogState extends State<_SearchSettingsDialog> {
                     final searchOptions =
                         ComicSource.find(
                           searchTarget,
-                        )!.searchPageData!.searchOptions ??
+                        )?.searchPageData?.searchOptions ??
                         <SearchOptions>[];
                     options = searchOptions.map((e) => e.defaultValue).toList();
                     onChanged();
@@ -497,7 +522,7 @@ class _SearchSettingsDialogState extends State<_SearchSettingsDialog> {
     var children = <Widget>[];
 
     final searchOptions =
-        ComicSource.find(searchTarget)!.searchPageData!.searchOptions ??
+        ComicSource.find(searchTarget)?.searchPageData?.searchOptions ??
         <SearchOptions>[];
     if (searchOptions.length != options.length) {
       options = searchOptions.map((e) => e.defaultValue).toList();

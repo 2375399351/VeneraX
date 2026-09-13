@@ -308,4 +308,22 @@ void main() {
           'the-id');
     });
   });
+
+  group('buildComicCollectionSource', () {
+    test('has no search implementation', () {
+      // The tag/author chips must not route into the search result page for a
+      // collection: that page needs searchPageData and crashed without it
+      // (issue #272). Callers gate on this being null.
+      final source = buildComicCollectionSource(
+        ComicCollection(
+          id: 'x',
+          sourceKey: 'comic_collection_x',
+          name: 'Story',
+          members: [CollectionMember(sourceKey: 'jm', comicId: '1')],
+          createdAt: DateTime(2026, 1, 1),
+        ),
+      );
+      expect(source.searchPageData, isNull);
+    });
+  });
 }

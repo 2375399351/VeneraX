@@ -578,12 +578,14 @@ abstract mixin class _ComicPageActions {
       target.jump(context);
       return;
     }
-    context.to(
-      () => SearchResultPage(
-        text: tag,
-        sourceKey: source?.key ?? comic.sourceKey,
-      ),
-    );
+    // Collections and online libraries are native sources without a search
+    // implementation, so searching "within" them is meaningless. Send the tag to
+    // the aggregated search instead, which only queries sources that can search.
+    if (source?.searchPageData == null) {
+      context.to(() => AggregatedSearchPage(keyword: tag));
+      return;
+    }
+    context.to(() => SearchResultPage(text: tag, sourceKey: source!.key));
   }
 
   void showMoreActions() {

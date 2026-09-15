@@ -286,6 +286,37 @@ abstract class ComicCollectionStore {
   static List<ComicCollection> containing(String sourceKey, String comicId) =>
       all().where((c) => c.contains(sourceKey, comicId)).toList();
 
+  /// Whether the comic sits in at least one collection.
+  static bool isMember(String sourceKey, String comicId) =>
+      _memberRefKeys().contains('$sourceKey/$comicId');
+
+  static Object? _memberKeysSource;
+
+  static Set<String>? _memberKeys;
+
+  /// Ref keys of every comic filed into any collection.
+  ///
+  /// Memoised because comic tiles ask once per build and parsing the whole
+  /// payload per tile is visible while scrolling a grid. Keyed on the identity
+  /// of the stored list rather than invalidated from [_write]: a sync download
+  /// or backup restore swaps the settings map without passing through here, and
+  /// an identity check catches that as well. Nothing mutates the stored list in
+  /// place — [_write] always assigns a freshly built one.
+  static Set<String> _memberRefKeys() {
+    final raw = appdata.settings[settingsKey];
+    final cached = _memberKeys;
+    if (cached != null && identical(raw, _memberKeysSource)) return cached;
+    final keys = <String>{};
+    for (final c in all()) {
+      for (final m in c.members) {
+        keys.add(m.refKey);
+      }
+    }
+    _memberKeysSource = raw;
+    _memberKeys = keys;
+    return keys;
+  }
+
   /// Creates a collection. Members that are themselves collections are dropped.
   static ComicCollection create({
     String name = '',

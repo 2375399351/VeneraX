@@ -6,6 +6,60 @@ part of 'components.dart';
 /// would keep failing for the same reason.
 final _warmingCollectionCovers = <String>{};
 
+/// Marker colour for "already in a collection". Distinct from the favourite
+/// (green), read-later (orange) and history (blue) badges so four states stay
+/// tellable apart on one cover.
+const _kCollectionStatusColor = Color(0xFF7E57C2);
+
+/// Corner marker saying this comic already sits in at least one collection, so a
+/// long list needn't be opened item by item to avoid filing something twice.
+///
+/// Watches the store instead of taking a flag captured at build time: filing a
+/// comic from the very list showing it has to light up its marker with no
+/// reload. Renders nothing when the comic is in no collection, so callers can
+/// place it unconditionally.
+class CollectionMemberMarker extends StatelessWidget {
+  const CollectionMemberMarker({
+    super.key,
+    required this.sourceKey,
+    required this.comicId,
+    this.size = 13,
+    this.padding = 3,
+  });
+
+  final String sourceKey;
+
+  final String comicId;
+
+  final double size;
+
+  final double padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ComicCollectionStore.changes,
+      builder: (context, _) {
+        if (!ComicCollectionStore.isMember(sourceKey, comicId)) {
+          return const SizedBox.shrink();
+        }
+        return Container(
+          padding: EdgeInsets.all(padding),
+          decoration: BoxDecoration(
+            color: _kCollectionStatusColor.toOpacity(0.9),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(
+            Icons.library_add_check_rounded,
+            size: size,
+            color: Colors.white,
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Loads a collection's members once so their titles and covers land in the
 /// store, then rebuilds the tiles that are waiting on it.
 void _warmCollectionCover(String collectionId) {
@@ -138,6 +192,12 @@ class ComicTile extends StatelessWidget {
   bool get _isCollection =>
       ComicCollectionStore.isCollectionSourceKey(comic.sourceKey);
 
+  /// Whether this tile should say that the comic is already filed into a
+  /// collection. Never for a collection itself — collections cannot nest, so
+  /// the two markers share the same corner.
+  bool get _showCollectionStatus =>
+      !_isCollection && appdata.settings['showCollectionStatusOnTile'] == true;
+
   /// Corner marker drawn over the cover of a collection, in both display modes:
   /// the text badge only exists in detailed mode, and a cover marker is what
   /// makes a collection recognisable at a glance either way.
@@ -155,6 +215,13 @@ class ComicTile extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildCollectionStatusMarker({double size = 13}) =>
+      CollectionMemberMarker(
+        sourceKey: comic.sourceKey,
+        comicId: comic.id,
+        size: size,
+      );
 
   void _onTap() {
     if (onTap != null) {
@@ -565,6 +632,12 @@ class ComicTile extends StatelessWidget {
                   right: 3,
                   top: 3,
                   child: _buildCollectionMarker(context),
+                )
+              else if (_showCollectionStatus)
+                Positioned(
+                  right: 3,
+                  top: 3,
+                  child: _buildCollectionStatusMarker(),
                 ),
             ],
           ),
@@ -670,6 +743,14 @@ class ComicTile extends StatelessWidget {
                         top: 4,
                         child: _buildCollectionMarker(
                           context,
+                          size: constraints.maxWidth < 80 ? 10 : 13,
+                        ),
+                      )
+                    else if (_showCollectionStatus)
+                      Positioned(
+                        right: 4,
+                        top: 4,
+                        child: _buildCollectionStatusMarker(
                           size: constraints.maxWidth < 80 ? 10 : 13,
                         ),
                       ),
@@ -2997,6 +3078,22 @@ class SimpleComicTile extends StatelessWidget {
                 size: 12,
                 color: Colors.white,
               ),
+            ),
+          ),
+        ],
+      );
+    } else if (appdata.settings['showCollectionStatusOnTile'] == true) {
+      cover = Stack(
+        fit: StackFit.expand,
+        children: [
+          cover,
+          Positioned(
+            right: 3,
+            top: 3,
+            child: CollectionMemberMarker(
+              sourceKey: comic.sourceKey,
+              comicId: comic.id,
+              size: 12,
             ),
           ),
         ],

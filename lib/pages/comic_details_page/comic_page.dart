@@ -864,6 +864,38 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
   }
 
   Widget _buildDetailsCover(double width) {
+    Widget cover = AnimatedImage(
+      image: comicDetailCoverProvider(
+        sourceKey: comic.sourceKey,
+        id: comic.id,
+        cover: widget.cover ?? comic.cover,
+        localComic: _localComic,
+      ),
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+    );
+    // Same marker the list tiles carry, for the page the user actually opens to
+    // check before filing a comic a second time (#279).
+    if (!_isCollection &&
+        appdata.settings['showCollectionStatusOnTile'] == true) {
+      cover = Stack(
+        fit: StackFit.expand,
+        children: [
+          cover,
+          Positioned(
+            right: 6,
+            top: 6,
+            child: CollectionMemberMarker(
+              sourceKey: comic.sourceKey,
+              comicId: comic.id,
+              size: 16,
+              padding: 4,
+            ),
+          ),
+        ],
+      );
+    }
     return GestureDetector(
       onTap: () => _viewCover(context),
       onLongPress: () => _saveCover(context),
@@ -871,21 +903,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         tag: "cover${widget.heroID}",
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            width: width,
-            height: width / 0.72,
-            child: AnimatedImage(
-              image: comicDetailCoverProvider(
-                sourceKey: comic.sourceKey,
-                id: comic.id,
-                cover: widget.cover ?? comic.cover,
-                localComic: _localComic,
-              ),
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-            ),
-          ),
+          child: SizedBox(width: width, height: width / 0.72, child: cover),
         ),
       ),
     );

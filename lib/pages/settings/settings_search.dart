@@ -49,6 +49,7 @@ final _settingsSearchIndex = <_SettingsSearchEntry>[
   _SettingsSearchEntry("Show favorite status on comic tile", 4),
   _SettingsSearchEntry("Show history on comic tile", 4),
   _SettingsSearchEntry("Show read later status on comic tile", 4),
+  _SettingsSearchEntry("Show collection status on comic tile", 4),
   _SettingsSearchEntry("Reverse default chapter order", 4),
   _SettingsSearchEntry("Keyword blocking", 4, keywords: ["block", "filter"]),
   _SettingsSearchEntry("Tag blocking", 4, keywords: ["block", "filter", "tag"]),

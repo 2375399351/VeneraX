@@ -121,9 +121,6 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
         sliderFocus.nextFocus();
       }
     });
-    if (rotation != null) {
-      SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-    }
     super.initState();
     // Refresh the translation status badge as pages start/finish/fail; the
     // top bar lives in an OverlayEntry that a parent setState won't rebuild.
@@ -140,6 +137,11 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
     ImageTranslationService.instance.removeListener(
       _onTranslationStatusChanged,
     );
+    // The orientation lock belongs to the reader only: hand the device back to
+    // the platform default so other pages stay unaffected.
+    if (rotation != null) {
+      SystemChrome.setPreferredOrientations(resolveReadingOrientations(null));
+    }
     sliderFocus.dispose();
     super.dispose();
   }
@@ -153,10 +155,30 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
     });
   }
 
+  /// Reader-only orientation lock: null follows the device, false locks
+  /// portrait, true locks landscape. Reverted in [dispose].
   bool? rotation;
 
   void update() {
     setState(() {});
+  }
+
+  /// Phones in landscape have little height to spare, so the bars collapse to a
+  /// single compact row there.
+  bool get compactBars =>
+      App.isMobile && MediaQuery.orientationOf(context) == Orientation.landscape;
+
+  double get topBarHeight => compactBars ? 48.0 : kTopBarHeight;
+
+  double get bottomBarHeight => compactBars ? 56.0 : kBottomBarHeight;
+
+  void toggleReadingOrientation() {
+    setState(() {
+      rotation = nextReadingOrientation(rotation);
+    });
+    SystemChrome.setPreferredOrientations(
+      resolveReadingOrientations(rotation),
+    );
   }
 
   /// Night mode overlay tint, selected by `readerNightModeColor` setting.
@@ -219,7 +241,7 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
           top: 0,
           left: 0,
           right: 0,
-          height: kTopBarHeight + context.padding.top,
+          height: topBarHeight + context.padding.top,
           child: AnimatedSlide(
             duration: _readerChromeAnimationDuration,
             curve: Curves.easeOutCubic,
@@ -300,14 +322,6 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
                   child: IconButton(
                     icon: const Icon(Icons.comment),
                     onPressed: openChapterComments,
-                  ),
-                ),
-              if (canDownloadFromReader())
-                Tooltip(
-                  message: "Download".tl,
-                  child: IconButton(
-                    icon: const Icon(Icons.download_outlined),
-                    onPressed: downloadFromReader,
                   ),
                 ),
               ...buildTranslationControls(),
@@ -648,6 +662,27 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
     }
   }
 
+  /// Low-frequency actions, folded out of the bars to keep the visible rows
+  /// short: chapter download (was a top-bar button), desktop fullscreen and
+  /// share (were bottom-bar buttons).
+  List<MenuEntry> buildMoreMenuEntries() {
+    return [
+      if (canDownloadFromReader())
+        MenuEntry(
+          icon: Icons.download_outlined,
+          text: "Download".tl,
+          onClick: downloadFromReader,
+        ),
+      if (App.isDesktop)
+        MenuEntry(
+          icon: Icons.fullscreen,
+          text: "${"Full Screen".tl}(F12)",
+          onClick: () => context.reader.fullscreen(),
+        ),
+      MenuEntry(icon: Icons.share, text: "Share".tl, onClick: share),
+    ];
+  }
+
   Widget buildBottom() {
     // Use maxPage for display (excluding chapter comments page)
     final displayPage = context.reader.page.clamp(1, context.reader.maxPage);
@@ -686,53 +721,20 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
           onPressed: addImageFavorite,
         ),
       ),
-      if (App.isDesktop)
+      if (App.isMobile)
         Tooltip(
-          message: "${"Full Screen".tl}(F12)",
+          message: "${"Reading Orientation".tl}: ${switch (rotation) {
+            false => "Portrait".tl,
+            true => "Landscape".tl,
+            _ => "Auto".tl,
+          }}",
           child: IconButton(
-            icon: const Icon(Icons.fullscreen),
-            onPressed: () {
-              context.reader.fullscreen();
-            },
-          ),
-        ),
-      if (App.isAndroid)
-        Tooltip(
-          message: "Screen Rotation".tl,
-          child: IconButton(
-            icon: () {
-              if (rotation == null) {
-                return const Icon(Icons.screen_rotation);
-              } else if (rotation == false) {
-                return const Icon(Icons.screen_lock_portrait);
-              } else {
-                return const Icon(Icons.screen_lock_landscape);
-              }
-            }.call(),
-            onPressed: () {
-              if (rotation == null) {
-                setState(() {
-                  rotation = false;
-                });
-                SystemChrome.setPreferredOrientations([
-                  DeviceOrientation.portraitUp,
-                  DeviceOrientation.portraitDown,
-                ]);
-              } else if (rotation == false) {
-                setState(() {
-                  rotation = true;
-                });
-                SystemChrome.setPreferredOrientations([
-                  DeviceOrientation.landscapeLeft,
-                  DeviceOrientation.landscapeRight,
-                ]);
-              } else {
-                setState(() {
-                  rotation = null;
-                });
-                SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-              }
-            },
+            icon: Icon(switch (rotation) {
+              false => Icons.screen_lock_portrait,
+              true => Icons.screen_lock_landscape,
+              _ => Icons.screen_rotation,
+            }),
+            onPressed: toggleReadingOrientation,
           ),
         ),
       Tooltip(
@@ -765,82 +767,116 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
           onPressed: saveCurrentImage,
         ),
       ),
-      Tooltip(
-        message: "Share".tl,
-        child: IconButton(icon: const Icon(Icons.share), onPressed: share),
-      ),
+      MenuButton(entries: buildMoreMenuEntries()),
     ];
 
-    Widget child = SizedBox(
-      height: kBottomBarHeight,
-      child: Column(
-        children: [
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                onPressed: () => !isReversed
-                    ? context.reader.chapter > 1
-                          ? context.reader.toPrevChapter()
-                          : context.reader.toPage(1)
-                    : context.reader.chapter < context.reader.maxChapter
-                    ? context.reader.toNextChapter()
-                    : context.reader.toPage(context.reader.maxPage),
-                icon: const Icon(Icons.first_page),
-              ),
-              Expanded(child: buildSlider()),
-              GestureDetector(
-                onTap: showPageJumpDialog,
-                child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.tertiaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: Text(
-                      text,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ),
-                ),
-              ),
-              IconButton.filledTonal(
-                onPressed: () => !isReversed
-                    ? context.reader.chapter < context.reader.maxChapter
-                          ? context.reader.toNextChapter()
-                          : context.reader.toPage(context.reader.maxPage)
-                    : context.reader.chapter > 1
-                    ? context.reader.toPrevChapter()
-                    : context.reader.toPage(1),
-                icon: const Icon(Icons.last_page),
-              ),
-              const SizedBox(width: 8),
-            ],
+    final prevChapterButton = IconButton.filledTonal(
+      onPressed: () => !isReversed
+          ? context.reader.chapter > 1
+                ? context.reader.toPrevChapter()
+                : context.reader.toPage(1)
+          : context.reader.chapter < context.reader.maxChapter
+          ? context.reader.toNextChapter()
+          : context.reader.toPage(context.reader.maxPage),
+      icon: const Icon(Icons.first_page),
+    );
+
+    final nextChapterButton = IconButton.filledTonal(
+      onPressed: () => !isReversed
+          ? context.reader.chapter < context.reader.maxChapter
+                ? context.reader.toNextChapter()
+                : context.reader.toPage(context.reader.maxPage)
+          : context.reader.chapter > 1
+          ? context.reader.toPrevChapter()
+          : context.reader.toPage(1),
+      icon: const Icon(Icons.last_page),
+    );
+
+    final pageIndicator = GestureDetector(
+      onTap: showPageJumpDialog,
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 13),
           ),
-          LayoutBuilder(
-            builder: (context, constrains) {
-              final small = (constrains.maxWidth - buttons.length * 50) < 120;
-              return Row(
-                children: [
-                  const Spacer(),
-                  for (var button in buttons)
-                    if (!small)
-                      button.paddingHorizontal(4)
-                    else ...[
-                      button,
-                      const Spacer(),
-                    ],
-                  if (!small) const SizedBox(width: 4),
-                ],
-              );
-            },
-          ),
-        ],
+        ),
       ),
     );
+
+    Widget twoRowLayout() => Column(
+      children: [
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            const SizedBox(width: 8),
+            prevChapterButton,
+            Expanded(child: buildSlider()),
+            pageIndicator,
+            nextChapterButton,
+            const SizedBox(width: 8),
+          ],
+        ),
+        LayoutBuilder(
+          builder: (context, constrains) {
+            final small = (constrains.maxWidth - buttons.length * 50) < 120;
+            return Row(
+              children: [
+                const Spacer(),
+                for (var button in buttons)
+                  if (!small)
+                    button.paddingHorizontal(4)
+                  else ...[
+                    button,
+                    const Spacer(),
+                  ],
+                if (!small) const SizedBox(width: 4),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+
+    // Landscape phones have little height to spare: fold the slider row and the
+    // action row into one so the bar stops covering a third of the page. Only
+    // when the width actually fits everything plus a usable slider, otherwise
+    // the single row overflows and the two-row layout is the lesser evil.
+    Widget child = compactBars
+        ? LayoutBuilder(
+            builder: (context, constrains) {
+              const kMinSliderWidth = 120.0;
+              final fits =
+                  constrains.maxWidth -
+                      (buttons.length + 2) * 48 -
+                      74 -
+                      8 >=
+                  kMinSliderWidth;
+              return SizedBox(
+                height: fits ? bottomBarHeight : kBottomBarHeight,
+                child: fits
+                    ? Row(
+                        children: [
+                          const SizedBox(width: 4),
+                          prevChapterButton,
+                          Expanded(child: buildSlider()),
+                          pageIndicator,
+                          nextChapterButton,
+                          ...buttons,
+                          const SizedBox(width: 4),
+                        ],
+                      )
+                    : twoRowLayout(),
+              );
+            },
+          )
+        : SizedBox(height: bottomBarHeight, child: twoRowLayout());
 
     return BlurEffect(
       child: Container(

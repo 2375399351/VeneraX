@@ -82,6 +82,35 @@ Future<void> applyReaderSystemUiMode(bool showSystemStatusBar) {
   );
 }
 
+/// Reader-only orientation lock, cycled by the bottom bar's toggle:
+/// null (follow the device) -> portrait -> landscape -> null.
+@visibleForTesting
+bool? nextReadingOrientation(bool? current) => switch (current) {
+  null => false,
+  false => true,
+  _ => null,
+};
+
+/// Preferred orientations for a reader orientation lock. The unlocked state
+/// resolves to the empty list, not [DeviceOrientation.values]: the latter forces
+/// all four orientations on, overriding both the device's own rotation lock and
+/// the platform manifest (which excludes upside-down portrait on phones). The
+/// empty list is what hands control back, so leaving the reader restores
+/// whatever the rest of the app already had.
+@visibleForTesting
+List<DeviceOrientation> resolveReadingOrientations(bool? rotation) =>
+    switch (rotation) {
+      false => const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ],
+      true => const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ],
+      _ => const <DeviceOrientation>[],
+    };
+
 extension _ReaderContext on BuildContext {
   _ReaderState get reader => findAncestorStateOfType<_ReaderState>()!;
 

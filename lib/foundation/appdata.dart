@@ -363,6 +363,7 @@ class Settings with ChangeNotifier {
     'showHistoryStatusOnTile': false,
     'showReadLaterStatusOnTile': true,
     'showCollectionStatusOnTile': true,
+    'showPageCountOnTile': true,
     'blockedWords': [],
     // Tag-only blocklist, separate from blockedWords so a word meant for titles
     // can't silently hide whole tag families. Matched as a substring of a tag's

@@ -387,4 +387,57 @@ void main() {
       tempDir.deleteSync(recursive: true);
     }
   });
+
+  group('quick page count', () {
+    Comic comicWith({int? maxPage, List<String>? tags}) => Comic(
+      'Title',
+      'cover.jpg',
+      'id',
+      'Author',
+      tags,
+      'Desc',
+      'source_a',
+      maxPage,
+      'zh',
+    );
+
+    test('prefers maxPage over tags', () {
+      const repository = ComicStateRepository();
+      expect(
+        repository.quickPageCountFor(
+          comicWith(maxPage: 42, tags: const ['pages:99']),
+        ),
+        '42',
+      );
+    });
+
+    test('falls back to a page count tag across namespaces', () {
+      const repository = ComicStateRepository();
+      expect(repository.quickPageCountFor(comicWith(tags: const ['pages:31'])), '31');
+      expect(repository.quickPageCountFor(comicWith(tags: const ['Page: 7'])), '7');
+      expect(repository.quickPageCountFor(comicWith(tags: const ['页数:18'])), '18');
+      expect(repository.quickPageCountFor(comicWith(tags: const ['頁數:25'])), '25');
+    });
+
+    test('ignores a non-positive maxPage and unrelated tags', () {
+      const repository = ComicStateRepository();
+      expect(repository.quickPageCountFor(comicWith(maxPage: 0)), isNull);
+      expect(
+        repository.quickPageCountFor(comicWith(tags: const ['author:someone'])),
+        isNull,
+      );
+      expect(repository.quickPageCountFor(comicWith(tags: const [])), isNull);
+      expect(repository.quickPageCountFor(comicWith()), isNull);
+    });
+
+    test('a zero maxPage still falls back to a tag', () {
+      const repository = ComicStateRepository();
+      expect(
+        repository.quickPageCountFor(
+          comicWith(maxPage: 0, tags: const ['pages:12']),
+        ),
+        '12',
+      );
+    });
+  });
 }

@@ -198,6 +198,11 @@ class ComicTile extends StatelessWidget {
   bool get _showCollectionStatus =>
       !_isCollection && appdata.settings['showCollectionStatusOnTile'] == true;
 
+  /// Whether the tile shows a page count. Never for a collection: its members
+  /// each have their own count, so a single number there would be meaningless.
+  bool get _showPageCount =>
+      !_isCollection && appdata.settings['showPageCountOnTile'] == true;
+
   /// Corner marker drawn over the cover of a collection, in both display modes:
   /// the text badge only exists in detailed mode, and a cover marker is what
   /// makes a collection recognisable at a glance either way.
@@ -684,7 +689,9 @@ class ComicTile extends StatelessWidget {
                         updateText: displayInfo.updateTime,
                         statusText: displayInfo.status,
                         progressText: chapterProgress.currentTitle,
-                        pagesText: displayInfo.pagesText,
+                        pagesText: _showPageCount
+                            ? displayInfo.pagesText
+                            : null,
                       ),
                     ),
                   ],
@@ -769,16 +776,32 @@ class ComicTile extends StatelessWidget {
                             ? 10.0
                             : 12.0;
 
-                        if (text == null) {
-                          return const SizedBox();
-                        }
-
-                        var children = <Widget>[];
-                        var lines = text.split('\n');
+                        var lines = text == null
+                            ? <String>[]
+                            : text.split('\n');
                         lines.removeWhere((e) => e.trim().isEmpty);
                         if (lines.length > 3) {
                           lines = lines.sublist(0, 3);
                         }
+                        final pageCount = _showPageCount
+                            ? const ComicStateRepository().quickPageCountFor(
+                                comic,
+                              )
+                            : null;
+                        // Prepended after the description was already trimmed to
+                        // its 3 lines, so the count adds a line instead of
+                        // costing one. Sources that already spell the count into
+                        // the description would otherwise say it twice.
+                        if (pageCount != null &&
+                            !lines.any((e) => e.containsNumber(pageCount))) {
+                          lines.insert(0, '${pageCount}P');
+                        }
+
+                        if (lines.isEmpty) {
+                          return const SizedBox();
+                        }
+
+                        var children = <Widget>[];
                         for (var line in lines) {
                           children.add(
                             Container(
@@ -1096,6 +1119,7 @@ class ComicDescription extends StatelessWidget {
     final tagItems = _tagItems();
     final tagText = _tagText(tagItems);
     final status = _clean(statusText) ?? _statusText();
+    final pages = _clean(pagesText) ?? _pagesText();
     final fallbackDescription = _fallbackDescription(
       update,
       progress,
@@ -1119,6 +1143,9 @@ class ComicDescription extends StatelessWidget {
         )
       else if (authors != null)
         _infoRow(context, "Authors".tl, authors, Colors.lightBlue),
+      // Ahead of update/source/tags on purpose: only the first few rows survive
+      // the height budget below, and page count is what a reader filters on.
+      if (pages != null) _infoRow(context, "Pages".tl, pages, Colors.teal),
       if (update != null) _infoRow(context, "Update".tl, update, Colors.cyan),
       if (source != null) _infoRow(context, "Source".tl, source, Colors.cyan),
       if (tagItems.isNotEmpty && onTapTag != null)
@@ -1387,6 +1414,12 @@ class ComicDescription extends StatelessWidget {
 
   String? _statusText() {
     return _tagsWithNamespace(_statusNamespaces).firstOrNull;
+  }
+
+  /// Page count from a `pages:` style tag, for sources that report it that way
+  /// instead of through [Comic.maxPage].
+  String? _pagesText() {
+    return _tagsWithNamespace(_pagesNamespaces).firstOrNull;
   }
 
   String? _updateTextFromTags() {

@@ -545,6 +545,7 @@ const _skipSyncCategories = <_SkipSyncCategory>[
       "showHistoryStatusOnTile",
       "showReadLaterStatusOnTile",
       "showCollectionStatusOnTile",
+      "showPageCountOnTile",
     ],
   ),
   _SkipSyncCategory(

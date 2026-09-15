@@ -168,7 +168,15 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
   bool get compactBars =>
       App.isMobile && MediaQuery.orientationOf(context) == Orientation.landscape;
 
-  double get topBarHeight => compactBars ? 48.0 : kTopBarHeight;
+  /// Compact top bar height. The floor follows the text scale: the title area
+  /// stacks a 16sp and a 12sp line when a chapter name is present, so a fixed
+  /// 48 overflows once the system font is enlarged.
+  double get topBarHeight => compactBars
+      ? math.min(
+          kTopBarHeight,
+          math.max(48.0, MediaQuery.textScalerOf(context).scale(16 + 12) + 16),
+        )
+      : kTopBarHeight;
 
   double get bottomBarHeight => compactBars ? 56.0 : kBottomBarHeight;
 
@@ -325,6 +333,7 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
                   ),
                 ),
               ...buildTranslationControls(),
+              MenuButton(entries: buildMoreMenuEntries()),
               Tooltip(
                 message: "Settings".tl,
                 child: IconButton(
@@ -662,9 +671,8 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
     }
   }
 
-  /// Low-frequency actions, folded out of the bars to keep the visible rows
-  /// short: chapter download (was a top-bar button), desktop fullscreen and
-  /// share (were bottom-bar buttons).
+  /// Low-frequency actions, folded into the top bar's menu to keep both bars
+  /// short: chapter download, desktop fullscreen and share.
   List<MenuEntry> buildMoreMenuEntries() {
     return [
       if (canDownloadFromReader())
@@ -767,7 +775,6 @@ class _ReaderScaffoldState extends State<_ReaderScaffold> {
           onPressed: saveCurrentImage,
         ),
       ),
-      MenuButton(entries: buildMoreMenuEntries()),
     ];
 
     final prevChapterButton = IconButton.filledTonal(

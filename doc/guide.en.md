@@ -90,6 +90,14 @@ If throughput is poor or the provider returns rate-limit errors, adjust:
 
 Most users do not need Advanced settings; changing any performance detail switches the mode to "Custom" automatically. Each text line is erased using a tight region and the translated text is kept inside its own area, reducing damage to characters and backgrounds. Complex artwork, very long sentences and unusual layouts can still need a retry or the "Color patch" fallback.
 
+"Translation prompt" replaces the built-in prompt. The built-in one asks for natural dialogue, reuse of already-agreed character names, and a report of proper nouns new to the page — requirements that cost input tokens on every request. A small self-hosted model that cannot afford them can be given a shorter prompt, at the cost of translation quality and consistent naming across pages. When writing your own:
+
+| Placeholder | Replaced with |
+| --- | --- |
+| `$target` | The target language name, e.g. "English" |
+
+Two things must stay in the prompt or the feature stops working. First, ask the model to output only a JSON object like `{"lines":[{"id":0,"text":"translation"}]}` with each id appearing exactly once — the app uses those ids to put each translation back in its own bubble, and a reply it cannot parse fails the page. Second, if you want names to stay consistent, tell the model to reuse the renderings given in the `glossary` field and to return newly seen proper nouns in a `names` field. Clearing the field and saving restores the built-in prompt. The setting travels with your backups across devices.
+
 <!--anchor:translation-limits-->
 ### Things to know
 

@@ -52,12 +52,111 @@ class _TranslationPromptPageState extends State<TranslationPromptPage> {
     );
   }
 
+  /// Reference for writing a replacement prompt: the one placeholder, the shape
+  /// the page's text arrives in, and the reply shape the parser needs. The last
+  /// is the part worth spelling out — a shortened prompt that drops the output
+  /// contract still gets billed, then fails to parse.
+  void _showFormatHelp() {
+    // No intrinsic width of its own: ContentDialog measures content through
+    // IntrinsicWidth, which an infinite-width child cannot answer.
+    Widget code(String text) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: context.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(text, style: ts.s12.copyWith(fontFamily: 'monospace')),
+      );
+    }
+
+    Widget section(String title, List<Widget> children) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: ts.bold.s14),
+          const SizedBox(height: 4),
+          ...children,
+          const SizedBox(height: 16),
+        ],
+      );
+    }
+
+    Widget body(String text) => Text(text, style: ts.s14);
+
+    // Sample values are localized; only the field names are literal.
+    var src = "original".tl;
+    var dst = "translation".tl;
+
+    showDialog(
+      context: App.rootContext,
+      builder: (context) => ContentDialog(
+        title: "Prompt format".tl,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 520),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                section("Placeholder".tl, [
+                  body(
+                    "\$target is replaced with the name of the target language you picked. It is the only placeholder."
+                        .tl,
+                  ),
+                ]),
+                section("What is sent".tl, [
+                  body(
+                    "Your text becomes the system message. The page's recognized lines are sent separately as the user message:"
+                        .tl,
+                  ),
+                  code(
+                    '{"glossary":{"$src":"$dst"},\n'
+                    ' "lines":[{"id":0,"text":"$src"}]}',
+                  ),
+                  body(
+                    "glossary carries names already agreed for this comic and is omitted until there are some."
+                        .tl,
+                  ),
+                ]),
+                section("What must come back".tl, [
+                  code(
+                    '{"lines":[{"id":0,"text":"$dst"}],\n'
+                    ' "names":{"$src":"$dst"}}',
+                  ),
+                  body(
+                    "lines is required: one entry per input id, each id exactly once. A reply without it cannot be read and the page is left untranslated — the request is still billed."
+                        .tl,
+                  ),
+                  const SizedBox(height: 8),
+                  body(
+                    "names is optional. Leaving it out shortens both the prompt and the reply, but character names then stop matching between pages."
+                        .tl,
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+        actions: [Button.filled(onPressed: context.pop, child: Text("OK".tl))],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: Appbar(
         title: Text("Translation prompt".tl),
-        actions: [TextButton(onPressed: _reset, child: Text("Reset".tl))],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: "Prompt format".tl,
+            onPressed: _showFormatHelp,
+          ),
+          TextButton(onPressed: _reset, child: Text("Reset".tl)),
+        ],
       ),
       body: Column(
         children: [

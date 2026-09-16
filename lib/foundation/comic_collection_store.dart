@@ -19,6 +19,15 @@ enum CollectionDisplayMode {
       name == tabs.name ? tabs : flat;
 }
 
+/// How the members of a collection are presented on its detail page.
+enum CollectionDetailDisplayMode {
+  chapters,
+  covers;
+
+  static CollectionDetailDisplayMode fromName(String? name) =>
+      name == covers.name ? covers : chapters;
+}
+
 /// One member comic of a collection: a reference into some other source, plus
 /// the last known display fields.
 ///
@@ -210,6 +219,24 @@ abstract class ComicCollectionStore {
   static final changes = _CollectionChanges();
 
   static const settingsKey = 'comicCollections';
+
+  /// Global detail presentation shared by every collection. It is stored in
+  /// settings (rather than a collection payload) so one switch updates all
+  /// collection details and travels through WebDAV as one preference.
+  static const detailDisplayModeSettingsKey =
+      'comicCollectionDetailDisplayMode';
+
+  static CollectionDetailDisplayMode get detailDisplayMode =>
+      CollectionDetailDisplayMode.fromName(
+        appdata.settings[detailDisplayModeSettingsKey]?.toString(),
+      );
+
+  static void setDetailDisplayMode(CollectionDetailDisplayMode mode) {
+    if (detailDisplayMode == mode) return;
+    appdata.settings[detailDisplayModeSettingsKey] = mode.name;
+    appdata.saveData();
+    notifyChanged();
+  }
 
   static const sourceKeyPrefix = 'comic_collection_';
 

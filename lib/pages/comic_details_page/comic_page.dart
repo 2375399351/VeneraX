@@ -277,6 +277,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
   @override
   void initState() {
     scrollController.addListener(onScroll);
+    ComicCollectionStore.changes.addListener(_onCollectionChanged);
     PreTranslationTaskManager.instance.addListener(update);
     // The per-comic translation toggle lives in the service; listen so the
     // pre-translate button appears/disappears the moment it changes.
@@ -287,6 +288,7 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
   @override
   void dispose() {
     scrollController.removeListener(onScroll);
+    ComicCollectionStore.changes.removeListener(_onCollectionChanged);
     PreTranslationTaskManager.instance.removeListener(update);
     ImageTranslationService.instance.removeListener(update);
     super.dispose();
@@ -296,6 +298,25 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
   void update() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  void _onCollectionChanged() {
+    if (mounted && ComicCollectionStore.isCollectionSourceKey(widget.sourceKey)) {
+      setState(() {});
+    }
+  }
+
+  ComicCollection? get _collection => ComicCollectionStore.find(widget.id);
+
+  void _toggleCollectionDetailMode() {
+    final collection = _collection;
+    if (collection == null) return;
+    final mode = ComicCollectionStore.detailDisplayMode ==
+            CollectionDetailDisplayMode.chapters
+        ? CollectionDetailDisplayMode.covers
+        : CollectionDetailDisplayMode.chapters;
+    ComicCollectionStore.setDetailDisplayMode(mode);
+    ComicSourceManager().refreshCollectionSources();
   }
 
   @override
@@ -783,6 +804,21 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
         child: Text(comic.title),
       ),
       actions: [
+        if (ComicCollectionStore.isCollectionSourceKey(widget.sourceKey))
+          IconButton(
+            icon: Icon(
+              ComicCollectionStore.detailDisplayMode ==
+                      CollectionDetailDisplayMode.covers
+                  ? Icons.view_list_outlined
+                  : Icons.grid_view_outlined,
+            ),
+            tooltip: (ComicCollectionStore.detailDisplayMode ==
+                        CollectionDetailDisplayMode.covers
+                    ? 'Show chapters'
+                    : 'Show covers')
+                .tl,
+            onPressed: _toggleCollectionDetailMode,
+          ),
         if (!isDownloaded)
           IconButton(
             onPressed: download,
@@ -1460,6 +1496,11 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
   }
 
   Widget buildChapters() {
+    if (ComicCollectionStore.isCollectionSourceKey(comic.sourceKey) &&
+        ComicCollectionStore.detailDisplayMode ==
+            CollectionDetailDisplayMode.covers) {
+      return _buildCollectionCovers();
+    }
     if (comic.chapters == null) {
       if (detailsLoadError != null) {
         return SliverLazyToBoxAdapter(
@@ -1542,6 +1583,64 @@ class _ComicPageState extends LoadingState<ComicPage, ComicDetails>
     return _ComicChapters(
       history: history,
       groupedMode: comic.chapters!.isGrouped,
+    );
+  }
+
+  Widget _buildCollectionCovers() {
+    final collection = _collection;
+    if (collection == null || collection.members.isEmpty) {
+      return const SliverPadding(padding: EdgeInsets.zero);
+    }
+    final comics = [
+      for (final member in collection.members)
+        Comic(
+          member.label,
+          member.cachedCover,
+          member.comicId,
+          member.cachedSubtitle.isEmpty ? null : member.cachedSubtitle,
+          const ['Collection member'],
+          '',
+          member.sourceKey,
+          null,
+          null,
+        ),
+    ];
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: _ComicSectionHeader(
+            icon: Icons.collections_bookmark_outlined,
+            title: 'Comics in collection'.tl,
+            trailing: Text(
+              '${comics.length}',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: context.colorScheme.outline,
+              ),
+            ),
+          ),
+        ),
+        SliverGridComics(
+          comics: comics,
+          onTap: (comic, heroID) {
+            final member = collection.members.firstWhere(
+              (item) =>
+                  item.sourceKey == comic.sourceKey &&
+                  item.comicId == comic.id,
+            );
+            context.to(
+              () => ComicPage(
+                id: member.comicId,
+                sourceKey: member.sourceKey,
+                cover: member.cachedCover,
+                title: member.label,
+                heroID: heroID,
+              ),
+            );
+          },
+          badgeBuilder: (comic) => ComicSource.find(comic.sourceKey)?.name,
+        ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 12)),
+      ],
     );
   }
 

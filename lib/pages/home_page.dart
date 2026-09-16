@@ -71,6 +71,18 @@ Widget _homeChevron(BuildContext context) {
   );
 }
 
+Comic _collectionAsComic(ComicCollection collection) => Comic(
+  collection.displayName,
+  collection.displayCover,
+  collection.id,
+  null,
+  const ['Collection'],
+  '@n comics'.tlParams({'n': collection.members.length}),
+  collection.sourceKey,
+  null,
+  null,
+);
+
 class _HomeSectionSurface extends StatelessWidget {
   const _HomeSectionSurface({required this.child});
 
@@ -1479,20 +1491,26 @@ class _Collections extends StatefulWidget {
 }
 
 class _CollectionsState extends State<_Collections> {
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onCollectionsChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     appdata.settings.addListener(_onSettingsChanged);
+    ComicCollectionStore.changes.addListener(_onCollectionsChanged);
     super.initState();
   }
 
   @override
   void dispose() {
     appdata.settings.removeListener(_onSettingsChanged);
+    ComicCollectionStore.changes.removeListener(_onCollectionsChanged);
     super.dispose();
-  }
-
-  void _onSettingsChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
@@ -1529,58 +1547,36 @@ class _CollectionsState extends State<_Collections> {
                 ),
               ).paddingHorizontal(16),
             ),
-            for (final c in shown) ...[
-              Divider(
-                height: 0.6,
-                thickness: 0.6,
-                color: context.colorScheme.outlineVariant.toOpacity(0.5),
-              ),
-              _buildRow(c),
-            ],
+            if (shown.isNotEmpty)
+              SizedBox(
+                height: _homeComicTileSize(context).height + 4,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: shown.length,
+                  itemBuilder: (context, index) {
+                    final collection = shown[index];
+                    final heroID = Object.hash('collection', collection.id);
+                    return SimpleComicTile(
+                      comic: _collectionAsComic(collection),
+                      heroID: heroID,
+                      width: _homeComicTileSize(context).width,
+                      height: _homeComicTileSize(context).height,
+                      onTap: () => App.mainNavigatorKey?.currentContext?.to(
+                        () => ComicPage(
+                          id: collection.id,
+                          sourceKey: collection.sourceKey,
+                          cover: collection.displayCover,
+                          title: collection.displayName,
+                          heroID: heroID,
+                        ),
+                      ),
+                    ).paddingHorizontal(8).paddingVertical(2);
+                  },
+                ),
+              ).paddingHorizontal(8).paddingBottom(16),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildRow(ComicCollection collection) {
-    return InkWell(
-      onTap: () {
-        App.mainNavigatorKey?.currentContext?.to(
-          () => ComicPage(
-            id: collection.id,
-            sourceKey: collection.sourceKey,
-            cover: collection.displayCover,
-            title: collection.displayName,
-          ),
-        );
-      },
-      child: SizedBox(
-        height: 48,
-        child: Row(
-          children: [
-            Icon(
-              Icons.library_books_outlined,
-              size: 18,
-              color: context.colorScheme.outline,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                collection.displayName,
-                style: ts.s14,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              "@n comics".tlParams({'n': collection.members.length}),
-              style: ts.s12.copyWith(color: context.colorScheme.outline),
-            ),
-          ],
-        ),
-      ).paddingHorizontal(16),
     );
   }
 }

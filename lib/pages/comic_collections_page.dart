@@ -61,6 +61,9 @@ class ComicCollectionsPage extends StatefulWidget {
 
 class _ComicCollectionsPageState extends State<ComicCollectionsPage> {
   List<ComicCollection> collections = const [];
+  final searchTextController = TextEditingController();
+  var keyword = '';
+  var sortMode = 'manual';
 
   @override
   void initState() {
@@ -74,6 +77,7 @@ class _ComicCollectionsPageState extends State<ComicCollectionsPage> {
   @override
   void dispose() {
     ComicCollectionStore.changes.removeListener(_reload);
+    searchTextController.dispose();
     super.dispose();
   }
 
@@ -144,12 +148,77 @@ class _ComicCollectionsPageState extends State<ComicCollectionsPage> {
     );
   }
 
+  List<ComicCollection> get filteredCollections {
+    final query = keyword.trim().toLowerCase();
+    final result = collections.where((collection) {
+      if (query.isEmpty) return true;
+      return collection.displayName.toLowerCase().contains(query) ||
+          collection.members.any(
+            (member) => member.label.toLowerCase().contains(query),
+          );
+    }).toList();
+    switch (sortMode) {
+      case 'name':
+        result.sort(
+          (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
+        );
+        break;
+      case 'count':
+        result.sort((a, b) => b.members.length.compareTo(a.members.length));
+        break;
+      case 'created':
+        result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+    }
+    return result;
+  }
+
+  Comic _asComic(ComicCollection collection) => Comic(
+    collection.displayName,
+    collection.displayCover,
+    collection.id,
+    null,
+    const ['Collection'],
+    '@n comics'.tlParams({'n': collection.members.length}),
+    collection.sourceKey,
+    null,
+    null,
+  );
+
+  String _sortLabel(String value) {
+    switch (value) {
+      case 'name':
+        return 'Name'.tl;
+      case 'count':
+        return 'Comic count'.tl;
+      case 'created':
+        return 'Recently created'.tl;
+      default:
+        return 'Custom order'.tl;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: Appbar(
         title: Text("Collections".tl),
         actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Sort'.tl,
+            icon: const Icon(Icons.sort),
+            initialValue: sortMode,
+            onSelected: (value) => setState(() => sortMode = value),
+            itemBuilder: (context) => [
+              for (final value in ['manual', 'name', 'count', 'created'])
+                PopupMenuItem(
+                  value: value,
+                  child: Text(_sortLabel(value)),
+                ),
+            ],
+          ),
           Tooltip(
             message: "Guide".tl,
             child: IconButton(
@@ -164,108 +233,80 @@ class _ComicCollectionsPageState extends State<ComicCollectionsPage> {
           ),
         ],
       ),
-      body: collections.isEmpty
-          ? _buildEmptyState()
-          : ReorderableListView.builder(
-              padding: EdgeInsets.fromLTRB(
-                12,
-                8,
-                12,
-                context.padding.bottom + 8,
+      body: SmoothCustomScrollView(
+        scrollbarTopPadding: context.padding.top + 56,
+        slivers: [
+          if (collections.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: AppSearchField(
+                  controller: searchTextController,
+                  onChanged: (value) => setState(() => keyword = value),
+                ),
               ),
-              buildDefaultDragHandles: false,
-              onReorderItem: (oldIndex, newIndex) {
-                ComicCollectionStore.reorder(oldIndex, newIndex);
-                _applyChange();
-              },
-              itemCount: collections.length,
-              itemBuilder: (context, index) =>
-                  _buildCard(collections[index], index),
             ),
-    );
-  }
-
-  Widget _buildCard(ComicCollection collection, int index) {
-    final modeText = collection.displayMode == CollectionDisplayMode.tabs
-        ? "Chapter tabs".tl
-        : "Merged chapters".tl;
-    return Container(
-      key: ValueKey(collection.id),
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      decoration: BoxDecoration(
-        color: context.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: context.colorScheme.outlineVariant.toOpacity(0.5),
-          width: 0.6,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _open(collection),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 10, 4, 10),
-          child: Row(
-            children: [
-              ReorderableDragStartListener(
-                index: index,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(
-                    Icons.drag_indicator,
-                    color: context.colorScheme.outline,
-                    size: 22,
-                  ),
-                ),
+          if (collections.isEmpty)
+            SliverFillRemaining(hasScrollBody: false, child: _buildEmptyState())
+          else if (filteredCollections.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text('No matching collections'.tl, style: ts.s16),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      collection.displayName,
-                      style: ts.s16,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${"@n comics".tlParams({'n': collection.members.length})}'
-                      '  ·  $modeText',
-                      style: ts.s12.copyWith(
-                        color: context.colorScheme.outline,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              MenuButton(
-                entries: [
+            )
+          else
+            SliverGridComics(
+              comics: filteredCollections.map(_asComic).toList(),
+              onTapWithIndex: (comic, heroID, _) {
+                final collection = ComicCollectionStore.find(comic.id);
+                if (collection != null) _open(collection);
+              },
+              menuBuilder: (comic) {
+                final collection = ComicCollectionStore.find(comic.id);
+                if (collection == null) return const [];
+                final sourceIndex = collections.indexWhere(
+                  (item) => item.id == collection.id,
+                );
+                return [
                   MenuEntry(
                     icon: Icons.chrome_reader_mode_outlined,
-                    text: "Details".tl,
+                    text: 'Details'.tl,
                     onClick: () => _open(collection),
                   ),
                   MenuEntry(
                     icon: Icons.edit,
-                    text: "Edit".tl,
+                    text: 'Edit'.tl,
                     onClick: () => _edit(collection),
                   ),
                   MenuEntry(
                     icon: Icons.delete_outline,
-                    text: "Delete".tl,
+                    text: 'Delete'.tl,
                     color: context.colorScheme.error,
                     onClick: () => _delete(collection),
                   ),
-                ],
-              ),
-            ],
-          ),
-        ),
+                  if (sourceIndex > 0)
+                    MenuEntry(
+                      icon: Icons.arrow_upward,
+                      text: 'Move up'.tl,
+                      onClick: () {
+                        ComicCollectionStore.reorder(sourceIndex, sourceIndex - 1);
+                        _applyChange();
+                      },
+                    ),
+                  if (sourceIndex >= 0 && sourceIndex < collections.length - 1)
+                    MenuEntry(
+                      icon: Icons.arrow_downward,
+                      text: 'Move down'.tl,
+                      onClick: () {
+                        ComicCollectionStore.reorder(sourceIndex, sourceIndex + 1);
+                        _applyChange();
+                      },
+                    ),
+                ];
+              },
+            ),
+        ],
       ),
     );
   }

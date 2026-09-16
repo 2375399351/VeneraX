@@ -136,6 +136,21 @@ void main() {
       expect(copy.members.single.cachedTitle, 'T1');
       expect(copy.createdAt.millisecondsSinceEpoch, 1234);
     });
+
+    test('detail display mode defaults to chapters for unknown values', () {
+      expect(
+        CollectionDetailDisplayMode.fromName(null),
+        CollectionDetailDisplayMode.chapters,
+      );
+      expect(
+        CollectionDetailDisplayMode.fromName('unknown'),
+        CollectionDetailDisplayMode.chapters,
+      );
+      expect(
+        CollectionDetailDisplayMode.fromName('covers'),
+        CollectionDetailDisplayMode.covers,
+      );
+    });
   });
 
   group('display fallbacks', () {

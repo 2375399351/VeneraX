@@ -153,6 +153,7 @@ class ComicTile extends StatelessWidget {
     super.key,
     required this.comic,
     this.enableLongPressed = true,
+    this.enableContextMenu = true,
     this.badge,
     this.menuOptions,
     this.onTap,
@@ -163,6 +164,8 @@ class ComicTile extends StatelessWidget {
   final Comic comic;
 
   final bool enableLongPressed;
+
+  final bool enableContextMenu;
 
   final String? badge;
 
@@ -266,6 +269,7 @@ class ComicTile extends StatelessWidget {
   }
 
   void showMenu(Offset location, BuildContext context) {
+    if (!enableContextMenu) return;
     showMenuX(App.rootContext, location, [
       MenuEntry(
         icon: Icons.chrome_reader_mode_outlined,
@@ -1727,6 +1731,7 @@ class SliverGridComics extends StatefulWidget {
     this.onLongPressedWithIndex,
     this.selections,
     this.enableHero = true,
+    this.enableContextMenu = true,
     this.swipeActionBuilder,
   });
 
@@ -1749,6 +1754,9 @@ class SliverGridComics extends StatefulWidget {
   final void Function(Comic, int heroID, int index)? onLongPressedWithIndex;
 
   final bool enableHero;
+
+  /// Suppresses single-item menus while the host performs batch selection.
+  final bool enableContextMenu;
 
   /// When set, each tile becomes swipeable on mobile. The builder returns the
   /// panes (start = right swipe, end = left swipe) for a given comic, or null
@@ -1825,6 +1833,7 @@ class _SliverGridComicsState extends State<SliverGridComics> {
       comics: comics,
       heroIDs: heroIDs,
       enableHero: widget.enableHero,
+      enableContextMenu: widget.enableContextMenu,
       selection: widget.selections,
       onLastItemBuild: widget.onLastItemBuild,
       badgeBuilder: widget.badgeBuilder,
@@ -1843,6 +1852,7 @@ class _SliverGridComics extends StatelessWidget {
     required this.comics,
     required this.heroIDs,
     this.enableHero = true,
+    this.enableContextMenu = true,
     this.onLastItemBuild,
     this.badgeBuilder,
     this.menuBuilder,
@@ -1859,6 +1869,8 @@ class _SliverGridComics extends StatelessWidget {
   final List<int> heroIDs;
 
   final bool enableHero;
+
+  final bool enableContextMenu;
 
   final Map<Comic, bool>? selection;
 
@@ -1891,6 +1903,7 @@ class _SliverGridComics extends StatelessWidget {
             : selection![comics[index]] ?? false;
         var comic = ComicTile(
           comic: comics[index],
+          enableContextMenu: enableContextMenu,
           badge: badge,
           menuOptions: menuBuilder?.call(comics[index]),
           onTap: onTapWithIndex != null

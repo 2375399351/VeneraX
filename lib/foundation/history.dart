@@ -464,6 +464,18 @@ class HistoryManager with ChangeNotifier {
         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
       """;
 
+  /// Same write as [_insertHistorySql], but carries the row's current `hidden`
+  /// value over instead of letting `insert or replace` reset it to NULL.
+  ///
+  /// The subquery is part of the VALUES row, so SQLite evaluates it before
+  /// REPLACE deletes the conflicting row — it reads the pre-existing flag. Done
+  /// in one statement on purpose: a read-then-write would race the isolate
+  /// writer in [_addHistoryAsync].
+  static const _updateHistoryKeepVisibilitySql = """
+        insert or replace into history (id, title, subtitle, cover, time, type, ep, page, readEpisode, max_page, chapter_group, hidden)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (select hidden from history where id == ? and type == ?));
+      """;
+
   static String _cacheKey(String id, ComicType type) => "${type.value}:$id";
 
   bool _hasCompositePrimaryKey(ResultSet columns) {
@@ -600,6 +612,25 @@ class HistoryManager with ChangeNotifier {
   void addHistory(History newItem) {
     if (!isInitialized) return;
     _writeLocalHistory(newItem);
+    _mirrorToDomain(newItem);
+    _cacheAddedHistory(newItem);
+    notifyListeners();
+  }
+
+  /// Persists [newItem] without changing whether it shows in the history list.
+  ///
+  /// For maintenance writes that refresh a record's display fields on the app's
+  /// own initiative — resolving a missing cover, or re-attaching metadata after
+  /// a local rescan. [addHistory] deliberately un-hides the row, which is right
+  /// for reading but wrong here: a background cover fetch landing after the user
+  /// deleted the record would bring it straight back to the list (issue #270).
+  void updateHistoryKeepingVisibility(History newItem) {
+    if (!isInitialized) return;
+    _db.execute(_updateHistoryKeepVisibilitySql, [
+      ..._historySqlArgs(newItem),
+      newItem.id,
+      newItem.type.value,
+    ]);
     _mirrorToDomain(newItem);
     _cacheAddedHistory(newItem);
     notifyListeners();
@@ -966,7 +997,10 @@ class HistoryManager with ChangeNotifier {
         });
         updatedHistory.group = history.group;
 
-        addHistory(updatedHistory);
+        // A refresh only rewrites display fields, so it must not pull a record
+        // the user removed from the list back into it — the refresh-all task
+        // works from a snapshot taken before the deletion.
+        updateHistoryKeepingVisibility(updatedHistory);
         return const _HistoryRefreshResult(true);
       } catch (e, s) {
         lastError = e.toString();

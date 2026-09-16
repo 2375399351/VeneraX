@@ -404,8 +404,9 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                   : null,
               useDeviceSettings: useDeviceSpecificSettings,
             ),
-            if ((_effectiveSetting('readerMode') as String?)
-                    ?.startsWith('gallery') ??
+            if ((_effectiveSetting('readerMode') as String?)?.startsWith(
+                  'gallery',
+                ) ??
                 false)
               _SliderSetting(
                 title:
@@ -425,8 +426,9 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                     : null,
                 useDeviceSettings: useDeviceSpecificSettings,
               ),
-            if ((_effectiveSetting('readerMode') as String?)
-                    ?.startsWith('gallery') ??
+            if ((_effectiveSetting('readerMode') as String?)?.startsWith(
+                  'gallery',
+                ) ??
                 false)
               _SliderSetting(
                 title:
@@ -445,13 +447,16 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                     : null,
                 useDeviceSettings: useDeviceSpecificSettings,
               ),
-            if (((_effectiveSetting('readerMode') as String?)
-                        ?.startsWith('gallery') ??
-                    false) &&
-                ((_effectiveSetting('readerScreenPicNumberForLandscape') as int?) ??
-                        1) >
-                    1 ||
-                ((_effectiveSetting('readerScreenPicNumberForPortrait') as int?) ??
+            if (((_effectiveSetting('readerMode') as String?)?.startsWith(
+                          'gallery',
+                        ) ??
+                        false) &&
+                    ((_effectiveSetting('readerScreenPicNumberForLandscape')
+                                as int?) ??
+                            1) >
+                        1 ||
+                ((_effectiveSetting('readerScreenPicNumberForPortrait')
+                            as int?) ??
                         1) >
                     1)
               _SwitchSetting(
@@ -466,8 +471,9 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                     : null,
                 useDeviceSettings: useDeviceSpecificSettings,
               ),
-            if ((_effectiveSetting('readerMode') as String?)
-                    ?.startsWith('gallery') ??
+            if ((_effectiveSetting('readerMode') as String?)?.startsWith(
+                  'gallery',
+                ) ??
                 false)
               _SwitchSetting(
                 title: "Fill screen".tl,
@@ -499,8 +505,9 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                   : null,
               useDeviceSettings: useDeviceSpecificSettings,
             ),
-            if ((_effectiveSetting('readerMode') as String?)
-                    ?.startsWith('continuous') ??
+            if ((_effectiveSetting('readerMode') as String?)?.startsWith(
+                  'continuous',
+                ) ??
                 false)
               _SliderSetting(
                 title: "Mouse scroll speed".tl,
@@ -534,8 +541,9 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                     : null,
                 useDeviceSettings: useDeviceSpecificSettings,
               ),
-            if ((_effectiveSetting('readerMode') as String?)
-                    ?.startsWith('continuous') ??
+            if ((_effectiveSetting('readerMode') as String?)?.startsWith(
+                  'continuous',
+                ) ??
                 false)
               _SliderSetting(
                 title: "Spacing between pages".tl,
@@ -1033,6 +1041,15 @@ class _ReaderSettingsState extends State<ReaderSettings> {
               },
             ),
             _CallbackSetting(
+              title: "Translation prompt".tl,
+              subtitle: LlmPromptStore.isCustom ? "Custom".tl : "Built-in".tl,
+              actionTitle: "Edit".tl,
+              callback: () async {
+                await context.to(() => const TranslationPromptPage());
+                if (mounted) setState(() {});
+              },
+            ),
+            _CallbackSetting(
               title: "Test translation".tl,
               subtitle: "Check the endpoint with a sample line".tl,
               actionTitle: "Test".tl,
@@ -1184,22 +1201,32 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                   "Deletes all stored page translations and rendered images. Language and glossary learned per comic are kept."
                       .tl,
               actionTitle: "Clear".tl,
-              callback: () async {
-                var removed = await ImageTranslationService.instance
-                    .clearAllTranslationCache();
-                // Also drop the pre-translation status the chapter picker reads
-                // from, so cleared results don't leave stale "translated" ticks.
-                PreTranslationTaskManager.instance.clearAllChapterStatus();
-                if (context.mounted) {
-                  context.showMessage(
-                    message: "Translation results cleared".tl,
+              // Confirm first: every cleared page costs tokens to translate
+              // again, and the button sits next to ones that only navigate.
+              callback: () => showConfirmDialog(
+                context: App.rootContext,
+                title: "Clear translation results".tl,
+                content:
+                    "Deletes every stored page translation and rendered image. Translating them again will spend API tokens."
+                        .tl,
+                btnColor: context.colorScheme.error,
+                onConfirm: () async {
+                  var removed = await ImageTranslationService.instance
+                      .clearAllTranslationCache();
+                  // Also drop the pre-translation status the chapter picker
+                  // reads from, so cleared results leave no stale ticks.
+                  PreTranslationTaskManager.instance.clearAllChapterStatus();
+                  if (context.mounted) {
+                    context.showMessage(
+                      message: "Translation results cleared".tl,
+                    );
+                  }
+                  Log.info(
+                    'Image Translation',
+                    'Cleared $removed translated pages by user',
                   );
-                }
-                Log.info(
-                  'Image Translation',
-                  'Cleared $removed translated pages by user',
-                );
-              },
+                },
+              ),
             ),
           ],
         ).toSliver(),

@@ -523,6 +523,10 @@ class Settings with ChangeNotifier {
     // 与旧的 url/key 单键同为明文。activeId 指向当前生效的服务商。
     'imageTranslationProviders': <dynamic>[],
     'imageTranslationActiveProviderId': '',
+    // User's replacement for the built-in translation system prompt.
+    // Empty = use the built-in one, so edits to it still reach everyone who
+    // never customized theirs. Syncs: it is a content choice, not device tuning.
+    'imageTranslationPrompt': '',
     // 新手性能档位；非 custom 时由设置页按当前设备写入下方四个兼容参数。
     // 档位与数值均为设备本地设置，不进入跨设备同步。
     'imageTranslationPerformancePreset': 'balanced',

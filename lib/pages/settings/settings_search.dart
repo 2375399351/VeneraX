@@ -128,6 +128,11 @@ final _settingsSearchIndex = <_SettingsSearchEntry>[
     keywords: ["LLM", "OCR", "translate"],
   ),
   _SettingsSearchEntry("LLM providers", 1, keywords: ["API", "model"]),
+  _SettingsSearchEntry(
+    "Translation prompt",
+    1,
+    keywords: ["prompt", "token", "system"],
+  ),
   _SettingsSearchEntry("Performance mode", 1, keywords: ["speed", "mobile"]),
   _SettingsSearchEntry("Text removal", 1, keywords: ["erase", "inpaint"]),
   _SettingsSearchEntry("Translation models", 1, keywords: ["OCR", "download"]),

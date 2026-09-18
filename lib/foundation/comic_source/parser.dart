@@ -847,6 +847,15 @@ class ComicSourceParser {
         var res = await JsEngine().runCode("""
           ComicSource.sources.$_key.comic.loadEp(${jsonEncode(id)}, ${jsonEncode(ep)})
         """);
+        if (res is! Map<String, dynamic>) {
+          throw "Invalid data:\nExpected: Map\nGot: ${res.runtimeType}";
+        }
+        if (!res.containsKey("images")) {
+          throw "Invalid data: missing 'images' field";
+        }
+        if (res["images"] is! List) {
+          throw "Invalid data:\nExpected images to be List\nGot: ${res["images"].runtimeType}";
+        }
         return Res(List.from(res["images"]));
       } catch (e, s) {
         Log.error("Network", "$e\n$s");

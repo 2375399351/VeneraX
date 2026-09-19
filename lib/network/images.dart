@@ -9,6 +9,7 @@ import 'package:venera/foundation/js_engine.dart';
 import 'package:venera/foundation/consts.dart';
 import 'package:venera/utils/translations.dart';
 import 'package:venera/utils/image.dart';
+import 'package:venera/foundation/image_provider/avif_fallback.dart';
 
 import 'app_dio.dart';
 
@@ -40,6 +41,9 @@ abstract class ImageDownloader {
     String? sourceKey, [
     String? cid,
   ]) async* {
+    // Apply AVIF fallback if this URL previously failed to decode.
+    url = AvifFallbackRegistry.instance.applyFallback(url);
+
     // A locally stored cover (a collection's custom cover, or one borrowed from
     // a downloaded member) can't go through the HTTP client: it rejects the
     // file scheme, which failed the whole download task (#206).
@@ -201,6 +205,9 @@ abstract class ImageDownloader {
     bool forDownload = false,
     void Function(Duration? retryAfter)? onRateLimited,
   ]) async* {
+    // Apply AVIF fallback if this URL previously failed to decode.
+    imageKey = AvifFallbackRegistry.instance.applyFallback(imageKey);
+
     final cacheKey = imageCacheKey(imageKey, sourceKey, cid, eid);
     final cache = await CacheManager().findCache(cacheKey);
 

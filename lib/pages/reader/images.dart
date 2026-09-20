@@ -2468,6 +2468,7 @@ ImageProvider _createImageProviderFromKey(
   final eid =
       reader.widget.chapters?.ids.elementAtOrNull(chapterNumber - 1) ?? '0';
   String? translationKey;
+  String? legacyTranslationKey;
   TranslationConfig? translationConfig;
   var translated = false;
   // Gate on the per-comic switch alone (which syncs over WebDAV), not on model
@@ -2480,6 +2481,12 @@ ImageProvider _createImageProviderFromKey(
         reader.type.sourceKey,
       )) {
     translationKey = ImageTranslationService.cacheKeyFor(
+      reader.type.comicSource?.key,
+      reader.cid,
+      eid,
+      page,
+    );
+    legacyTranslationKey = ImageTranslationService.legacyCacheKeyFor(
       imageKey,
       reader.type.comicSource?.key,
       reader.cid,
@@ -2504,6 +2511,7 @@ ImageProvider _createImageProviderFromKey(
         .mode
         .isContinuous, // For continuous mode, we need to resize the image to improve performance
     translationKey: translationKey,
+    legacyTranslationKey: legacyTranslationKey,
     translationConfig: translationConfig,
     translated: translated,
     comicTitle: reader.widget.name,

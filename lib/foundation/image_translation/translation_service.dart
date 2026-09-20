@@ -52,9 +52,15 @@ class _TranslationTask {
     this.imageBytes,
     this.config,
     this.chapter,
+    this.legacyCacheKey,
   );
 
   final String cacheKey;
+
+  /// Pre-#287 transport-derived key for the same page, when the scheduling path
+  /// could still address it. Lets a queued page adopt an older stored result
+  /// instead of paying for OCR and a translation request again.
+  final String? legacyCacheKey;
 
   final String cid;
   final String? sourceKey;
@@ -298,14 +304,52 @@ class ImageTranslationService with ChangeNotifier {
   /// Cache key of the translated variant of one page. It embeds the comic's
   /// language pair so changing that comic's languages re-translates instead of
   /// serving pages in the old language. Scope (source/comic/chapter) comes
-  /// first, image key last, so a comic or chapter forms a deletable key prefix.
+  /// first, page identity last, so a comic or chapter forms a deletable key
+  /// prefix.
+  ///
+  /// The last segment is the page's 1-based position in its chapter, NOT the
+  /// image key. How a page's bytes are obtained changes with circumstance — a
+  /// source url while reading online, an absolute `file://` path once the
+  /// chapter is downloaded, a different absolute path on another device — so
+  /// keying on that gave one page several identities: pages translated before a
+  /// download read as untranslated after it, and stored text could never be
+  /// reused across devices for a downloaded comic (#287). The ordinal is the
+  /// same in every path.
+  ///
+  /// The page segment is terminated with `@` like every other segment, so no
+  /// page's key is a prefix of another's (`p1@` vs `p10@`) — prefix-scoped
+  /// counts and deletes stay exact if one is ever aimed at a single page.
   static String cacheKeyFor(
+    String? sourceKey,
+    String cid,
+    String eid,
+    int page,
+  ) {
+    return '${chapterScopePrefix(sourceKey, cid, eid)}p$page@';
+  }
+
+  /// The key a page was stored under before [cacheKeyFor] switched to the page
+  /// ordinal. Passed alongside the current key when reading so an existing
+  /// translation is still found — and moved to the stable key — as long as the
+  /// caller can address it, i.e. it holds the same image key that wrote it.
+  static String legacyCacheKeyFor(
     String imageKey,
     String? sourceKey,
     String cid,
     String eid,
   ) {
     return '${chapterScopePrefix(sourceKey, cid, eid)}$imageKey';
+  }
+
+  /// Stored regions for a page, adopting a legacy transport-keyed row when the
+  /// stable key has none. Null means never translated, empty means "no text".
+  static List<TranslatedRegion>? _storedRegions(
+    String cacheKey,
+    String? legacyCacheKey,
+  ) {
+    var regions = TranslationStore().get(cacheKey);
+    if (regions != null || legacyCacheKey == null) return regions;
+    return TranslationStore().adoptLegacyKey(legacyCacheKey, cacheKey);
   }
 
   /// Removes the rendered-image cache AND the durable stored text for every
@@ -413,6 +457,7 @@ class ImageTranslationService with ChangeNotifier {
     Uint8List imageBytes,
     InpaintMode mode, {
     required TranslationChapterIdentity chapter,
+    String? legacyCacheKey,
   }) async {
     TranslationStore().recordExistingChapter(chapter);
     var renderKey = renderedKey(cacheKey, mode);
@@ -421,7 +466,7 @@ class ImageTranslationService with ChangeNotifier {
       _completed.add(renderKey);
       return await cached.readAsBytes();
     }
-    var regions = TranslationStore().get(cacheKey);
+    var regions = _storedRegions(cacheKey, legacyCacheKey);
     if (regions == null) {
       // Never translated on any device that synced here; show the original.
       return null;
@@ -452,6 +497,7 @@ class ImageTranslationService with ChangeNotifier {
     Uint8List imageBytes,
     TranslationConfig config, {
     required TranslationChapterIdentity chapter,
+    String? legacyCacheKey,
     bool Function()? shouldCancel,
   }) async {
     var outcome = await _translateToCache(
@@ -460,6 +506,7 @@ class ImageTranslationService with ChangeNotifier {
       imageBytes,
       config,
       chapter: chapter,
+      legacyCacheKey: legacyCacheKey,
       shouldCancel: shouldCancel,
     );
     if (outcome == _TranslateOutcome.noContent) {
@@ -481,6 +528,7 @@ class ImageTranslationService with ChangeNotifier {
     Uint8List imageBytes,
     TranslationConfig config, {
     required TranslationChapterIdentity chapter,
+    String? legacyCacheKey,
     bool Function()? shouldCancel,
   }) async {
     TranslationStore().recordExistingChapter(chapter);
@@ -491,7 +539,7 @@ class ImageTranslationService with ChangeNotifier {
     var pipeline = _pipeline ??= PageTranslationPipeline();
     // The store is the durable source of truth: a hit (local, or merged from
     // another device via WebDAV) skips OCR and the paid LLM request entirely.
-    var regions = TranslationStore().get(cacheKey);
+    var regions = _storedRegions(cacheKey, legacyCacheKey);
     if (regions == null) {
       var analysis = await pipeline.analyzePage(
         imageBytes,
@@ -538,7 +586,8 @@ class ImageTranslationService with ChangeNotifier {
   /// Returns a success flag per input page, aligned with [pages]; it only
   /// throws [PipelineCanceled] when [shouldCancel] fires between pages.
   Future<List<bool>> translatePageGroup(
-    List<({String cacheKey, Uint8List imageBytes})> pages,
+    List<({String cacheKey, String? legacyCacheKey, Uint8List imageBytes})>
+    pages,
     String comicKey,
     TranslationConfig config, {
     required TranslationChapterIdentity chapter,
@@ -597,7 +646,7 @@ class ImageTranslationService with ChangeNotifier {
           settled[i] = true;
           continue;
         }
-        var stored = TranslationStore().get(p.cacheKey);
+        var stored = _storedRegions(p.cacheKey, p.legacyCacheKey);
         if (stored != null) {
           regionsOf[i] = stored;
           continue;
@@ -736,6 +785,7 @@ class ImageTranslationService with ChangeNotifier {
     TranslationConfig config,
     VoidCallback onTranslated, {
     required TranslationChapterIdentity chapter,
+    String? legacyCacheKey,
   }) {
     if (_noContent.contains(cacheKey)) {
       return;
@@ -763,8 +813,15 @@ class ImageTranslationService with ChangeNotifier {
       _queue.remove(oldest);
     }
     _queue.add(
-      _TranslationTask(cacheKey, cid, sourceKey, imageBytes, config, chapter)
-        ..listeners.add(onTranslated),
+      _TranslationTask(
+        cacheKey,
+        cid,
+        sourceKey,
+        imageBytes,
+        config,
+        chapter,
+        legacyCacheKey,
+      )..listeners.add(onTranslated),
     );
     _releaseTimer?.cancel();
     _pump();
@@ -796,6 +853,7 @@ class ImageTranslationService with ChangeNotifier {
         task.imageBytes,
         task.config,
         chapter: task.chapter,
+        legacyCacheKey: task.legacyCacheKey,
       );
       _errors.remove(renderKey);
       if (outcome != _TranslateOutcome.noContent) {

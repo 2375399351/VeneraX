@@ -1538,16 +1538,16 @@ class ComicDescription extends StatelessWidget {
 
   static const _pagesNamespaces = {'page', 'pages', '頁數', '页数'};
 
+  // 'language' is deliberately absent: it has no info row of its own, so
+  // filtering it here dropped it from display entirely (issue #288). It reads
+  // as a content tag anyway.
   static const _metadataNamespaces = {
     ..._authorNamespaces,
     ..._statusNamespaces,
     ..._updateNamespaces,
     ..._pagesNamespaces,
-    'language',
     'source',
     'uploader',
-    '語言',
-    '语言',
     '來源',
     '来源',
     '上傳者',

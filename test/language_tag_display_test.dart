@@ -41,27 +41,51 @@ void main() {
     expect(buckets.extraMeta['uploader'], 'someone');
   });
 
-  testWidgets('a comic tile lists a language tag among its tags', (
+  testWidgets('a comic tile leads its tag row with the language', (
     tester,
   ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
           body: SizedBox(
-            height: 220,
-            width: 420,
+            height: 124,
+            width: 300,
             child: ComicDescription(
               title: 'Comic',
-              subtitle: '',
+              subtitle: 'Artist',
               description: '',
               enableTranslate: false,
-              tags: ['language:chinese', 'female:sole male'],
+              tags: ['female:sole male', 'language:chinese'],
             ),
           ),
         ),
       ),
     );
 
-    expect(find.textContaining('chinese'), findsOneWidget);
+    // Leading, not merely present: the tag row is the first to lose to the
+    // tile's height budget, so language has to sit at its front to be seen.
+    expect(find.text('chinese / sole male'), findsOneWidget);
+  });
+
+  testWidgets('a tile without a language tag is unaffected', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 124,
+            width: 300,
+            child: ComicDescription(
+              title: 'Comic',
+              subtitle: 'Artist',
+              description: '',
+              enableTranslate: false,
+              tags: ['female:sole male'],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('sole male'), findsOneWidget);
   });
 }

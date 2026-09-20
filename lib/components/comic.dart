@@ -1120,7 +1120,10 @@ class ComicDescription extends StatelessWidget {
     final authors = authorItems.isEmpty
         ? null
         : authorItems.map((e) => e.label).join(", ");
-    final tagItems = _tagItems();
+    // Language leads the tag row rather than getting a row of its own: at the
+    // default tile scale only the first three rows fit, so a dedicated row
+    // would not be drawn at all (issue #288).
+    final tagItems = [..._languageItems(), ..._tagItems()];
     final tagText = _tagText(tagItems);
     final status = _clean(statusText) ?? _statusText();
     final pages = _clean(pagesText) ?? _pagesText();
@@ -1368,6 +1371,13 @@ class ComicDescription extends StatelessWidget {
     return rawTags.map((tag) => tag.label).join(" / ");
   }
 
+  /// Language tags, listed first in the tag row (issue #288).
+  List<_DescriptionTag> _languageItems() {
+    return _tagItemsWithNamespace(_languageNamespaces);
+  }
+
+  /// Content tags, minus language ones — those are prepended separately so they
+  /// lead the row.
   List<_DescriptionTag> _tagItems() {
     final rawTags = tags
         ?.map((e) => e.replaceAll("\n", " ").trim())
@@ -1375,6 +1385,7 @@ class ComicDescription extends StatelessWidget {
           (e) =>
               e.removeAllBlank != "" &&
               !_isMetadataTag(e) &&
+              !_isLanguageTag(e) &&
               _clean(e.split(':').last) != null,
         )
         .toList();
@@ -1476,6 +1487,14 @@ class ComicDescription extends StatelessWidget {
     return null;
   }
 
+  bool _isLanguageTag(String tag) {
+    final index = tag.indexOf(':');
+    if (index <= 0) return false;
+    return _languageNamespaces.contains(
+      _normalizeNamespace(tag.substring(0, index)),
+    );
+  }
+
   bool _isMetadataTag(String tag) {
     if (!tag.contains(':')) {
       final value = _clean(tag);
@@ -1538,9 +1557,16 @@ class ComicDescription extends StatelessWidget {
 
   static const _pagesNamespaces = {'page', 'pages', '頁數', '页数'};
 
-  // 'language' is deliberately absent: it has no info row of its own, so
-  // filtering it here dropped it from display entirely (issue #288). It reads
-  // as a content tag anyway.
+  static const _languageNamespaces = {
+    'language',
+    'languages',
+    'lang',
+    '語言',
+    '语言',
+  };
+
+  // 'language' is deliberately absent here: nothing renders metadata rows for
+  // it, so listing it made language tags vanish rather than move (issue #288).
   static const _metadataNamespaces = {
     ..._authorNamespaces,
     ..._statusNamespaces,

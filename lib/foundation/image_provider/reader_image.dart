@@ -247,6 +247,11 @@ class ReaderImageProvider
   @override
   String get diskCacheKey =>
       ImageDownloader.imageCacheKey(imageKey, sourceKey, cid, eid);
+
+  /// A translated page is rendered locally, so a decode failure there says
+  /// nothing about the server's encoding of the original.
+  @override
+  String? get fallbackUrl => translationKey == null ? imageKey : null;
 }
 
 /// Reads one page file from the local library.

@@ -1120,10 +1120,8 @@ class ComicDescription extends StatelessWidget {
     final authors = authorItems.isEmpty
         ? null
         : authorItems.map((e) => e.label).join(", ");
-    // Language leads the tag row rather than getting a row of its own: at the
-    // default tile scale only the first three rows fit, so a dedicated row
-    // would not be drawn at all (issue #288).
-    final tagItems = [..._languageItems(), ..._tagItems()];
+    final languageItems = _languageItems();
+    final tagItems = _tagItems();
     final tagText = _tagText(tagItems);
     final status = _clean(statusText) ?? _statusText();
     final pages = _clean(pagesText) ?? _pagesText();
@@ -1153,6 +1151,29 @@ class ComicDescription extends StatelessWidget {
       // Ahead of update/source/tags on purpose: only the first few rows survive
       // the height budget below, and page count is what a reader filters on.
       if (pages != null) _infoRow(context, "Pages".tl, pages, Colors.teal),
+      // High in the list for the same reason: a fixed-height tile draws only
+      // its first few rows, and language is worth a slot there (issue #288).
+      if (languageItems.isNotEmpty && onTapTag != null)
+        _actionRow(
+          context,
+          "Language".tl,
+          languageItems
+              .map(
+                (item) => _InfoAction(
+                  text: item.label,
+                  onTap: () => onTapTag!(item.value, item.namespace ?? ''),
+                ),
+              )
+              .toList(),
+          Colors.indigo,
+        )
+      else if (languageItems.isNotEmpty)
+        _infoRow(
+          context,
+          "Language".tl,
+          _tagText(languageItems)!,
+          Colors.indigo,
+        ),
       if (update != null) _infoRow(context, "Update".tl, update, Colors.cyan),
       if (source != null) _infoRow(context, "Source".tl, source, Colors.cyan),
       if (tagItems.isNotEmpty && onTapTag != null)
@@ -1183,6 +1204,8 @@ class ComicDescription extends StatelessWidget {
         final visibleRows = _visibleRowCount(
           constraints.maxHeight,
           rating != null,
+          totalRows: rows.length,
+          extraRows: languageItems.isEmpty ? 0 : 1,
         );
         return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1217,13 +1240,25 @@ class ComicDescription extends StatelessWidget {
     );
   }
 
-  int _visibleRowCount(double maxHeight, bool hasRating) {
+  /// Rows the tile can draw. [extraRows] widens the cap for rows added after
+  /// these numbers were tuned, so the language row costs no existing one
+  /// (issue #288).
+  ///
+  /// An unbounded height means the host scrolls (the detail page) rather than
+  /// clipping, so every row is drawn there; only a fixed-height tile has to
+  /// choose.
+  int _visibleRowCount(
+    double maxHeight,
+    bool hasRating, {
+    required int totalRows,
+    int extraRows = 0,
+  }) {
     if (maxHeight.isInfinite) {
-      return hasRating ? 4 : 5;
+      return totalRows;
     }
     final reservedHeight = (showTitle ? 24 : 0) + (hasRating ? 20 : 0);
     final count = ((maxHeight - reservedHeight) / 21).floor();
-    return math.max(1, math.min(5, count));
+    return math.max(1, math.min(5 + extraRows, count));
   }
 
   void _copy(BuildContext context, String text) {
@@ -1371,13 +1406,12 @@ class ComicDescription extends StatelessWidget {
     return rawTags.map((tag) => tag.label).join(" / ");
   }
 
-  /// Language tags, listed first in the tag row (issue #288).
+  /// Language tags, shown in a row of their own (issue #288).
   List<_DescriptionTag> _languageItems() {
     return _tagItemsWithNamespace(_languageNamespaces);
   }
 
-  /// Content tags, minus language ones — those are prepended separately so they
-  /// lead the row.
+  /// Content tags, minus language ones — those get their own row.
   List<_DescriptionTag> _tagItems() {
     final rawTags = tags
         ?.map((e) => e.replaceAll("\n", " ").trim())

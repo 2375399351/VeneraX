@@ -41,7 +41,7 @@ void main() {
     expect(buckets.extraMeta['uploader'], 'someone');
   });
 
-  testWidgets('a comic tile leads its tag row with the language', (
+  testWidgets('a comic tile shows the language in a row of its own', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -62,12 +62,17 @@ void main() {
       ),
     );
 
-    // Leading, not merely present: the tag row is the first to lose to the
-    // tile's height budget, so language has to sit at its front to be seen.
-    expect(find.text('chinese / sole male'), findsOneWidget);
+    // Its own labelled row, not merged into the tag row. The height given here
+    // is the real default tile's, where only about three rows are drawn — so
+    // this also pins that the row sits high enough to be visible at all.
+    expect(find.text('Language'), findsOneWidget);
+    expect(find.text('chinese'), findsOneWidget);
+    expect(find.text('sole male'), findsOneWidget);
   });
 
-  testWidgets('a tile without a language tag is unaffected', (tester) async {
+  testWidgets('a tile without a language tag shows no language row', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -86,6 +91,40 @@ void main() {
       ),
     );
 
+    expect(find.text('Language'), findsNothing);
+    expect(find.text('sole male'), findsOneWidget);
+  });
+
+  testWidgets('an unbounded host draws every row, tags included', (
+    tester,
+  ) async {
+    // The detail page puts this in a scroll view with no height limit, so the
+    // row budget must not clip there — a language row plus a rating used to
+    // push the tag row out entirely.
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ComicDescription(
+              title: 'Comic',
+              subtitle: 'Artist',
+              description: '',
+              enableTranslate: false,
+              badge: 'Source',
+              rating: 4.2,
+              updateText: '2026-01-01',
+              pagesText: '30',
+              showTitle: false,
+              tags: ['female:sole male', 'language:chinese'],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Language'), findsOneWidget);
+    expect(find.text('chinese'), findsOneWidget);
+    expect(find.text('Tags'), findsOneWidget);
     expect(find.text('sole male'), findsOneWidget);
   });
 }

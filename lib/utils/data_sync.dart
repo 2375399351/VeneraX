@@ -822,7 +822,7 @@ class DataSync with ChangeNotifier, WidgetsBindingObserver {
         try {
           final remotePath = serverAbsoluteWebdavPath(filename);
           final usedBufferedFallback = await uploadWithWebdav404Fallback(
-            streamUpload: () => client.writeFromFile(data!.path, remotePath),
+            streamUpload: () => writeFileStreamed(client, data!, remotePath),
             // Some WebDAV providers return 404 for streamed PUTs while the
             // same authenticated root accepts the former byte upload (#214).
             bufferedUpload: () async =>
@@ -1425,7 +1425,7 @@ class DataSync with ChangeNotifier, WidgetsBindingObserver {
         file = await exportVeneraComics([comic], includeImages: true);
         // Streamed: image packs are whole comic archives (often hundreds of
         // MB) — buffering one in RAM via readAsBytes was an OOM in waiting.
-        await client.writeFromFile(file.path, '/venera-comics/$fileName');
+        await writeFileStreamed(client, file, '/venera-comics/$fileName');
         Log.info("Image Sync", "Uploaded: ${comic.title}");
       } catch (e, s) {
         failures++;
